@@ -1,0 +1,14 @@
+tmux-agent-herd
+
+The agent-detection patterns in patterns/*.sh are derived from the agent-detection
+manifests distributed with Herdr (https://github.com/herdrdev/herdr), located at
+src/detect/manifests/*.toml in that project, which is licensed under the Apache
+License, Version 2.0.
+
+This project reimplements the matching logic for tmux in shell and does not
+incorporate Herdr's source code. The manifest string/regex patterns (e.g. the
+Claude Code and Codex OSC-title spinner globs, the "do you want to proceed?" /
+"requires approval" approval-form signatures) originate from those manifests.
+
+Herdr is Copyright its authors, licensed Apache-2.0. A copy of the Apache-2.0
+license text is available at http://www.apache.org/licenses/LICENSE-2.0

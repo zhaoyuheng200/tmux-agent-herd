@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# herd -- CLI for tmux-agent-herd. Thin wrapper over the daemon's state.json.
+#
+#   herd list              all agent panes and their state (table)
+#   herd blocked           only blocked panes (one target per line; empty if none)
+#   herd goto              jump to the next blocked pane (or open the navigator)
+#   herd nav               open the fzf navigator popup
+#   herd explain <target>  dump the detector's evidence for one pane
+#   herd status            daemon/state health
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(dirname "$HERE")"
+
+socket="$(tmux display-message -p '#{socket_path}' 2>/dev/null || echo default)"
+sockkey="$(printf '%s' "$socket" | cksum | cut -d' ' -f1)"
+RUN_DIR="${TMUX_TMPDIR:-/tmp}/agent-herd/$sockkey"
+STATE_JSON="$RUN_DIR/state.json"
+
+need_state() { [ -f "$STATE_JSON" ] || { echo "no state.json -- is the daemon running? (herd status)" >&2; exit 1; }; }
+
+cmd="${1:-list}"; shift || true
+case "$cmd" in
+  list)
+    need_state
+    jq -r '.panes[] | [.state,.target,.title] | @tsv' "$STATE_JSON" \
+      | sort | awk -F'\t' '{printf "%-8s %-24s %s\n",$1,$2,$3}'
+    ;;
+  blocked)
+    need_state
+    jq -r '.panes[] | select(.state=="blocked") | .target' "$STATE_JSON"
+    ;;
+  goto)
+    need_state
+    t="$(jq -r '.panes[] | select(.state=="blocked") | .target' "$STATE_JSON" | head -1)"
+    if [ -z "$t" ]; then
+      tmux display-message "no blocked agents" 2>/dev/null || echo "no blocked agents"
+      exit 0
+    fi
+    win="${t%.*}"
+    tmux select-window -t "$win" 2>/dev/null || true
+    tmux select-pane -t "$t" 2>/dev/null || true
+    ;;
+  nav)   exec "$ROOT/scripts/navigator.sh" ;;
+  explain)
+    tgt="${1:-}"; [ -n "$tgt" ] || { echo "usage: herd explain <session:win.pane>" >&2; exit 2; }
+    "$ROOT/scripts/detect.sh" --target "$tgt" --explain >/dev/null
+    ;;
+  status)
+    echo "run dir : $RUN_DIR"
+    if [ -f "$STATE_JSON" ]; then
+      echo "state   : $STATE_JSON"
+      echo "updated : $(jq -r '.updated' "$STATE_JSON" 2>/dev/null)"
+      echo "panes   : $(jq -r '.panes | length' "$STATE_JSON" 2>/dev/null)"
+    else
+      echo "state   : (none yet)"
+    fi
+    if [ -f "$RUN_DIR/daemon.lock" ] && command -v flock >/dev/null \
+       && ! flock -n "$RUN_DIR/daemon.lock" true 2>/dev/null; then
+      echo "daemon  : running (lock held)"
+    else
+      echo "daemon  : not running"
+    fi
+    ;;
+  *) echo "usage: herd {list|blocked|goto|nav|explain <target>|status}" >&2; exit 2 ;;
+esac
