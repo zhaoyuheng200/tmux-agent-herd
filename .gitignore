@@ -1,2 +1,6 @@
-fixtures/*.txt
-fixtures/*.title
+# Live pane captures (machine-specific, regenerated on demand); the synthetic
+# fixtures the test suite depends on are force-added below.
+fixtures/claude_idle.*
+fixtures/claude_working.*
+fixtures/claude_done.*
+fixtures/kiro_idle.*

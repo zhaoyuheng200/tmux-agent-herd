@@ -1,0 +1,6 @@
+  Using tool: execute_bash
+  This tool requires approval to run.
+  > 1. y - yes, single permission
+    2. t - trust, always allow
+    3. n - no (tab to edit)
+  esc to close
