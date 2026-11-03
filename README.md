@@ -19,8 +19,8 @@ detect + display + notify + navigate layer.
   `◐ working`, `○ idle`) and an aggregate `!N *N .N` module on the status line.
 - **Blocked notification.** When a pane transitions *into* `blocked`, one
   edge-triggered notification fires (tmux message and/or an OSC-9 desktop toast).
-- **Navigator.** `prefix + g` opens an fzf popup of all agent panes grouped
-  blocked > working > idle, with a live preview; Enter jumps to the pane.
+- **Navigator.** `prefix + g` opens an fzf popup of all agent panes, most recently active first
+  (Claude: time of the last prompt or reply), with a live preview; Enter jumps to the pane.
   `prefix + G` jumps directly to the next blocked agent.
 - **`herd` CLI.** `herd list | blocked | goto | nav | explain <target> | status`.
 
