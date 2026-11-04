@@ -15,19 +15,37 @@
 # Echo one of: working | blocked | idle | unknown
 
 detect_claude() {
-  local after_rule prompt_box title_working=1
+  local after_rule prompt_box status_line title_working=1 activity_working=0
 
   # Title carries a braille spinner glyph (U+2800..U+28FF) while working, ✳ idle.
+  # NOTE: only Claude Code builds up to ~2026-08 do this. Newer builds pin the
+  # title glyph at ✳ in every state, so this signal alone silently stops firing
+  # and every working pane reads as idle -- hence the screen signal below.
   printf '%s' "$TITLE" | grep -qP '^[\x{2800}-\x{28FF}] ' || title_working=0
 
   after_rule="$(region_after_last_horizontal_rule "$SCREEN")"
   prompt_box="$(region_prompt_box_body "$SCREEN")"
 
-  # 1. WORKING (herdr osc_title_working, priority 1100) -- spinner glyph in title
-  #    AND the screen is actually moving (screen_moved: first poll trusts the
-  #    glyph; later polls require a hash change or an advancing elapsed/token
-  #    counter). Defeats a frozen spinner on a hung/killed agent.
-  if [ "$title_working" = 1 ] && screen_moved; then
+  # In-pane activity line: the current turn's status line is live ("Nucleating…
+  # (7m 19s · ↓ 30.2k tokens)") rather than finished ("Worked for 25s · done
+  # 3:10 PM"). Unlike the title glyph this is present in every build, and unlike
+  # the ready-box check below it stays true while the input box is on screen --
+  # Claude keeps that box visible during a turn, which is why rule 3 would
+  # otherwise claim the pane is idle.
+  status_line="$(region_last_status_line "$SCREEN")"
+  if [ -n "$status_line" ] \
+     && ! printf '%s' "$status_line" | grep -qP "$STATUS_LINE_DONE_RE" \
+     && printf '%s' "$status_line" | grep -qP "$STATUS_LINE_LIVE_RE"; then
+    activity_working=1
+  fi
+
+  # 1. WORKING (herdr osc_title_working, priority 1100) -- a working signal
+  #    (live activity line, or a spinner glyph in the title on older builds) AND
+  #    the screen is actually moving (screen_moved: first poll trusts the signal;
+  #    later polls require a hash change or an advancing elapsed/token counter).
+  #    Defeats a frozen spinner on a hung/killed agent, and also stops a status
+  #    line quoted into a static pane's scrollback from reading as working.
+  if { [ "$activity_working" = 1 ] || [ "$title_working" = 1 ]; } && screen_moved; then
     echo working; return
   fi
   # Past this point the spinner is absent or stalled -> the pane is not actively
@@ -73,9 +91,9 @@ detect_claude() {
     echo idle; return
   fi
 
-  # 5. Spinner glyph present but stalled and nothing else matched: honestly
+  # 5. A working signal was present but stalled and nothing else matched: honestly
   #    unknown (a hung agent with no ready box), never a false "working".
-  if [ "$title_working" = 1 ]; then
+  if [ "$title_working" = 1 ] || [ "$activity_working" = 1 ]; then
     echo unknown; return
   fi
 

@@ -57,6 +57,18 @@ else
   skip_missing claude_working claude_working
 fi
 
+echo "== working with NO braille title (synthetic, Claude >= ~2026-09) =="
+# Regression guard for the "0 working, everything idle" bug: newer Claude Code
+# pins the OSC title glyph at ✳ in every state, so working has to be read off the
+# in-pane activity line. This fixture is the shape that broke it -- ✳ title, a
+# live "Nucleating… (7m 19s · ↓ 30.2k tokens)" line, an earlier turn's "· done"
+# line above it, and a ready ❯ box that made rule 3 answer idle.
+check claude_working_no_braille "$(run claude_working_no_braille claude)" working
+echo "== ... and the same fixture proven frozen -> idle, never a false working =="
+prev_pair claude_working_no_braille claude
+check claude_working_no_braille_frozen \
+  "$(run claude_working_no_braille claude --prev-hash "$PREV_H" --prev-counter "$PREV_C")" idle
+
 echo "== FROZEN spinner, NO ready box (truly hung agent) -> unknown, never working =="
 prev_pair claude_frozen claude
 check claude_frozen "$(run claude_frozen claude --prev-hash "$PREV_H" --prev-counter "$PREV_C")" unknown

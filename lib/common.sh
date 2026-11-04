@@ -55,6 +55,20 @@ region_prompt_box_body() {
 # any_line_matches "$text" 'PCRE' : true if any single line matches (grep -P).
 any_line_matches() { printf '%s\n' "$1" | grep -qP "$2"; }
 
+# Shapes of an agent status line. Kept as constants so the region extractor below
+# and the per-agent rules that classify the line cannot drift apart.
+STATUS_LINE_LIVE_RE='\x{2026}\s*\([^)]*\d+\s*[smh]\b'   # "… (7m 19s · ↓ 30.2k tokens)"
+STATUS_LINE_DONE_RE='\x{00B7}\s+done\b'                 # "· done 1:49 PM"
+
+# region_last_status_line: the LAST agent status line on screen -- either a live
+# activity line ("<verb>… (<elapsed> · ↓ <n>k tokens)") or a finished one
+# ("<verb> for <elapsed> · done <clock>"). Claude leaves each turn's finished
+# status line in the scrollback, so only the last match describes the current
+# turn; taking any match would let a previous turn's "done" mask a live one.
+region_last_status_line() {
+  printf '%s\n' "$1" | grep -P "$STATUS_LINE_LIVE_RE|$STATUS_LINE_DONE_RE" | tail -1
+}
+
 # screen_moved : frozen-spinner guard. Returns 0 (moved -> a spinner glyph may be
 # trusted as "working") when EITHER we have no prior poll (first sight: trust the
 # glyph, like herdr), OR the screen hash changed, OR the elapsed/token counter
