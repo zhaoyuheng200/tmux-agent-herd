@@ -45,6 +45,8 @@ agent_of() {
 # In-memory maps keyed by pane target -> prior hash / counter / state.
 declare -A PREV_HASH PREV_COUNTER PREV_STATE
 
+PREV_SUMMARY=""
+
 cleanup() { tmux set-option -gq @agent_summary "" 2>/dev/null || true; }
 trap cleanup EXIT
 
@@ -84,10 +86,14 @@ while :; do
     if [ "$state" = blocked ] && [ "${PREV_STATE[$target]:-}" != blocked ]; then
       "$NOTIFY" "$target" "$agent" "$title" 2>/dev/null || true
     fi
-    PREV_STATE[$target]="$state"
 
-    # Publish per-pane option for cheap reads by the pane-border format.
-    tmux set-option -pq -t "$target" @agent_state "$state" 2>/dev/null || true
+    # Publish per-pane option only when state changed; unconditional set-option
+    # triggers a pane-border redraw (pane_border_format.sh fork) every poll cycle
+    # for every agent pane, causing visible flashing.
+    if [ "$state" != "${PREV_STATE[$target]:-}" ]; then
+      tmux set-option -pq -t "$target" @agent_state "$state" 2>/dev/null || true
+    fi
+    PREV_STATE[$target]="$state"
 
     case "$state" in
       blocked) n_blocked=$((n_blocked+1)) ;;
@@ -112,7 +118,8 @@ while :; do
   [ "$n_blocked" -gt 0 ] && summary="${summary}#[fg=#ed8796]!$n_blocked "
   [ "$n_working" -gt 0 ] && summary="${summary}#[fg=#f5a97f]*$n_working "
   [ "$n_idle"    -gt 0 ] && summary="${summary}#[fg=#a6da95].$n_idle "
-  tmux set-option -gq @agent_summary "${summary% }" 2>/dev/null || true
+  new_summary="${summary% }"
+  tmux set-option -gq @agent_summary "$new_summary" 2>/dev/null || true
 
   # Atomic state.json for the CLI + navigator.
   {
@@ -121,6 +128,12 @@ while :; do
     printf ']}\n'
   } > "$STATE_JSON.tmp" && mv -f "$STATE_JSON.tmp" "$STATE_JSON"
 
-  tmux refresh-client -S 2>/dev/null || true
+  # Only force a status-line redraw when the summary actually changed;
+  # unconditional refresh-client every poll cycle causes visible flashing.
+  if [ "$new_summary" != "$PREV_SUMMARY" ]; then
+    tmux refresh-client -S 2>/dev/null || true
+  fi
+  PREV_SUMMARY="$new_summary"
+
   sleep "$INTERVAL"
 done
